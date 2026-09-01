@@ -11,37 +11,34 @@ function updatePreview() {
     var errorAlert = document.getElementById("errorAlert");
     var errorMessage = document.getElementById("errorMessage");
     var insertBtn = document.getElementById("insertBtn");
-
-    if (latexInput.trim() === "") {
+    
+    if(latexInput.trim() === "") {
         previewDiv.innerHTML = '<p style="font-size: 12px; color: #666;">Preview aparecerá aqui</p>';
-        errorAlert.style.display = "none";
-        insertBtn.disabled = false;
+        if (errorAlert) errorAlert.style.display = "none";
+        if (insertBtn) insertBtn.disabled = false;
         return;
     }
-
+    
     try {
-        // Mudamos throwOnError para true para forçar a captura de erros
         katex.render(latexInput, previewDiv, {
             throwOnError: true,
             displayMode: true
         });
-
-        // Se renderizou com sucesso: oculta o erro e habilita o botão
-        errorAlert.style.display = "none";
-        insertBtn.disabled = false;
-
+        
+        if (errorAlert) errorAlert.style.display = "none";
+        if (insertBtn) insertBtn.disabled = false;
+        
     } catch (e) {
-        // Se capturou erro: exibe a barra e desabilita a inserção
-        errorAlert.style.display = "flex";
-        insertBtn.disabled = true;
-
-        // Limpa a mensagem técnica do KaTeX para ficar mais amigável
-        var cleanMessage = e.message.replace("KaTeX parse error: ", "");
-        errorMessage.innerText = cleanMessage;
-
-        // Renderiza o erro em vermelho dentro do próprio preview (comportamento padrão do KaTeX)
+        if (errorAlert) errorAlert.style.display = "flex";
+        if (insertBtn) insertBtn.disabled = true;
+        
+        if (errorMessage) {
+            var cleanMessage = e.message.replace("KaTeX parse error: ", "");
+            errorMessage.innerText = cleanMessage;
+        }
+        
         katex.render(latexInput, previewDiv, {
-            throwOnError: false,
+            throwOnError: false, 
             displayMode: true
         });
     }
@@ -53,20 +50,22 @@ function insertLatex() {
 
     try {
         var katexHtml = katex.renderToString(latexInput, {
-            throwOnError: true,
+            throwOnError: true, 
             displayMode: true,
             output: 'mathml'
         });
 
         var mathMlMatch = katexHtml.match(/<math[^>]*>[\s\S]*<\/math>/i);
-
+        
         if (mathMlMatch) {
             var pureMathMl = mathMlMatch[0];
+            
+            // Garante o namespace XML
             if (!pureMathMl.includes("xmlns")) {
                 pureMathMl = pureMathMl.replace("<math", '<math xmlns="http://www.w3.org/1998/Math/MathML"');
             }
 
-            // Encapsula o MathML em um pacote XML lido nativamente pelo Word
+            // Pacote OOXML para forçar o Word a converter para OMML nativo
             var ooxmlPayload = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
             <pkg:package xmlns:pkg="http://schemas.microsoft.com/office/2006/xmlPackage">
               <pkg:part pkg:name="/_rels/.rels" pkg:contentType="application/vnd.openxmlformats-package.relationships+xml">
@@ -104,12 +103,12 @@ function insertLatex() {
                 { coercionType: Office.CoercionType.Ooxml },
                 function (asyncResult) {
                     if (asyncResult.status === Office.AsyncResultStatus.Failed) {
-                        console.error("Erro ao inserir: " + asyncResult.error.message);
+                        console.error("Erro ao inserir OOXML: " + asyncResult.error.message);
                     }
                 }
             );
         }
     } catch (err) {
-        console.error("Tentativa de inserir LaTeX inválido bloqueada.");
+        console.error("Erro na injeção:", err);
     }
 }

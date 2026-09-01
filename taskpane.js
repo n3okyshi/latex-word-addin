@@ -1,4 +1,3 @@
-// Aguarda o Office.js carregar completamente antes de liberar as interações
 Office.onReady(function (info) {
     if (info.host === Office.HostType.Word) {
         document.getElementById("insertBtn").onclick = insertLatex;
@@ -6,39 +5,111 @@ Office.onReady(function (info) {
     }
 });
 
-// Atualiza o preview dinamicamente (DRY: reaproveita a lógica de montagem da URL)
-function getLatexImageUrl(latexText) {
-    // dpi alto para boa resolução no Word
-    return "https://latex.codecogs.com/png.latex?\\dpi{300}\\huge " + encodeURIComponent(latexText);
-}
-
 function updatePreview() {
     var latexInput = document.getElementById("latexInput").value;
     var previewDiv = document.getElementById("preview");
-    
-    if(latexInput.trim() === "") {
+    var errorAlert = document.getElementById("errorAlert");
+    var errorMessage = document.getElementById("errorMessage");
+    var insertBtn = document.getElementById("insertBtn");
+
+    if (latexInput.trim() === "") {
         previewDiv.innerHTML = '<p style="font-size: 12px; color: #666;">Preview aparecerá aqui</p>';
+        errorAlert.style.display = "none";
+        insertBtn.disabled = false;
         return;
     }
-    
-    previewDiv.innerHTML = "<img src='" + getLatexImageUrl(latexInput) + "' alt='preview' style='max-width:100%;' />";
+
+    try {
+        // Mudamos throwOnError para true para forçar a captura de erros
+        katex.render(latexInput, previewDiv, {
+            throwOnError: true,
+            displayMode: true
+        });
+
+        // Se renderizou com sucesso: oculta o erro e habilita o botão
+        errorAlert.style.display = "none";
+        insertBtn.disabled = false;
+
+    } catch (e) {
+        // Se capturou erro: exibe a barra e desabilita a inserção
+        errorAlert.style.display = "flex";
+        insertBtn.disabled = true;
+
+        // Limpa a mensagem técnica do KaTeX para ficar mais amigável
+        var cleanMessage = e.message.replace("KaTeX parse error: ", "");
+        errorMessage.innerText = cleanMessage;
+
+        // Renderiza o erro em vermelho dentro do próprio preview (comportamento padrão do KaTeX)
+        katex.render(latexInput, previewDiv, {
+            throwOnError: false,
+            displayMode: true
+        });
+    }
 }
 
 function insertLatex() {
     var latexInput = document.getElementById("latexInput").value;
     if (!latexInput) return;
 
-    var imgUrl = getLatexImageUrl(latexInput);
-    var htmlContent = "<img src='" + imgUrl + "' alt='Equação LaTeX' />";
+    try {
+        var katexHtml = katex.renderToString(latexInput, {
+            throwOnError: true,
+            displayMode: true,
+            output: 'mathml'
+        });
 
-    // Insere o HTML (que carrega a imagem da equação) no local do cursor
-    Office.context.document.setSelectedDataAsync(
-        htmlContent,
-        { coercionType: Office.CoercionType.Html },
-        function (asyncResult) {
-            if (asyncResult.status === Office.AsyncResultStatus.Failed) {
-                console.error("Erro ao inserir: " + asyncResult.error.message);
+        var mathMlMatch = katexHtml.match(/<math[^>]*>[\s\S]*<\/math>/i);
+
+        if (mathMlMatch) {
+            var pureMathMl = mathMlMatch[0];
+            if (!pureMathMl.includes("xmlns")) {
+                pureMathMl = pureMathMl.replace("<math", '<math xmlns="http://www.w3.org/1998/Math/MathML"');
             }
+
+            // Encapsula o MathML em um pacote XML lido nativamente pelo Word
+            var ooxmlPayload = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+            <pkg:package xmlns:pkg="http://schemas.microsoft.com/office/2006/xmlPackage">
+              <pkg:part pkg:name="/_rels/.rels" pkg:contentType="application/vnd.openxmlformats-package.relationships+xml">
+                <pkg:xmlData>
+                  <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+                    <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>
+                  </Relationships>
+                </pkg:xmlData>
+              </pkg:part>
+              <pkg:part pkg:name="/word/document.xml" pkg:contentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml">
+                <pkg:xmlData>
+                  <w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+                    <w:body>
+                      <w:altChunk r:id="altChunkId1" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"/>
+                    </w:body>
+                  </w:document>
+                </pkg:xmlData>
+              </pkg:part>
+              <pkg:part pkg:name="/word/math.xml" pkg:contentType="application/mathml+xml">
+                <pkg:xmlData>
+                  ${pureMathMl}
+                </pkg:xmlData>
+              </pkg:part>
+              <pkg:part pkg:name="/word/_rels/document.xml.rels" pkg:contentType="application/vnd.openxmlformats-package.relationships+xml">
+                <pkg:xmlData>
+                  <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+                    <Relationship Id="altChunkId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/aFChunk" Target="/word/math.xml"/>
+                  </Relationships>
+                </pkg:xmlData>
+              </pkg:part>
+            </pkg:package>`;
+
+            Office.context.document.setSelectedDataAsync(
+                ooxmlPayload,
+                { coercionType: Office.CoercionType.Ooxml },
+                function (asyncResult) {
+                    if (asyncResult.status === Office.AsyncResultStatus.Failed) {
+                        console.error("Erro ao inserir: " + asyncResult.error.message);
+                    }
+                }
+            );
         }
-    );
+    } catch (err) {
+        console.error("Tentativa de inserir LaTeX inválido bloqueada.");
+    }
 }

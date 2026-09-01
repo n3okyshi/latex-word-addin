@@ -45,8 +45,7 @@ function insertLatex() {
         if (mathMlMatch) {
             var pureMathMl = mathMlMatch[0];
             
-            // LIMPEZA CRÍTICA PARA O WORD 2016: 
-            // Remove as tags <semantics> e <annotation> que quebram o conversor XML interno do Office
+            // Limpeza das tags auxiliares do KaTeX
             pureMathMl = pureMathMl.replace(/<semantics[^>]*>/gi, '');
             pureMathMl = pureMathMl.replace(/<\/semantics>/gi, '');
             pureMathMl = pureMathMl.replace(/<annotation[^>]*>[\s\S]*?<\/annotation>/gi, '');
@@ -55,7 +54,9 @@ function insertLatex() {
                 pureMathMl = pureMathMl.replace("<math", '<math xmlns="http://www.w3.org/1998/Math/MathML"');
             }
 
+            // Adição da declaração mso-application obrigatória para Flat OPC no Word 2016
             var ooxmlPayload = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+            '<?mso-application progid="Word.Document"?>' +
             '<pkg:package xmlns:pkg="http://schemas.microsoft.com/office/2006/xmlPackage">' +
               '<pkg:part pkg:name="/_rels/.rels" pkg:contentType="application/vnd.openxmlformats-package.relationships+xml">' +
                 '<pkg:xmlData>' +
@@ -87,19 +88,18 @@ function insertLatex() {
               '</pkg:part>' +
             '</pkg:package>';
 
-            // Inserção com feedback visual caso o Word recuse o pacote
-            Office.context.document.setSelectedDataAsync(
-                ooxmlPayload,
-                { coercionType: Office.CoercionType.Ooxml },
-                function (asyncResult) {
-                    if (asyncResult.status === Office.AsyncResultStatus.Failed) {
-                        errorAlert.style.display = "flex";
-                        errorMessage.innerText = "Erro de Inserção do Word: " + asyncResult.error.message;
-                    } else {
-                        errorAlert.style.display = "none";
-                    }
-                }
-            );
+            // Utilizando Word.run em vez do Office.context compartilhado
+            Word.run(function (context) {
+                var range = context.document.getSelection();
+                range.insertOoxml(ooxmlPayload, Word.InsertLocation.replace);
+                
+                return context.sync().then(function () {
+                    errorAlert.style.display = "none";
+                });
+            }).catch(function (error) {
+                errorAlert.style.display = "flex";
+                errorMessage.innerText = "Erro Word.run: " + error.message;
+            });
         }
     } catch (err) {
         errorAlert.style.display = "flex";

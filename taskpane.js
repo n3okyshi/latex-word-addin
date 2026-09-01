@@ -33,6 +33,9 @@ function updatePreview() {
 
 function insertLatex() {
     var latexInput = document.getElementById("latexInput").value;
+    var errorAlert = document.getElementById("errorAlert");
+    var errorMessage = document.getElementById("errorMessage");
+    
     if (!latexInput) return;
 
     try {
@@ -41,6 +44,13 @@ function insertLatex() {
 
         if (mathMlMatch) {
             var pureMathMl = mathMlMatch[0];
+            
+            // LIMPEZA CRÍTICA PARA O WORD 2016: 
+            // Remove as tags <semantics> e <annotation> que quebram o conversor XML interno do Office
+            pureMathMl = pureMathMl.replace(/<semantics[^>]*>/gi, '');
+            pureMathMl = pureMathMl.replace(/<\/semantics>/gi, '');
+            pureMathMl = pureMathMl.replace(/<annotation[^>]*>[\s\S]*?<\/annotation>/gi, '');
+            
             if (pureMathMl.indexOf("xmlns") === -1) {
                 pureMathMl = pureMathMl.replace("<math", '<math xmlns="http://www.w3.org/1998/Math/MathML"');
             }
@@ -77,17 +87,22 @@ function insertLatex() {
               '</pkg:part>' +
             '</pkg:package>';
 
+            // Inserção com feedback visual caso o Word recuse o pacote
             Office.context.document.setSelectedDataAsync(
                 ooxmlPayload,
                 { coercionType: Office.CoercionType.Ooxml },
                 function (asyncResult) {
                     if (asyncResult.status === Office.AsyncResultStatus.Failed) {
-                        console.error("Erro ao inserir: " + asyncResult.error.message);
+                        errorAlert.style.display = "flex";
+                        errorMessage.innerText = "Erro de Inserção do Word: " + asyncResult.error.message;
+                    } else {
+                        errorAlert.style.display = "none";
                     }
                 }
             );
         }
     } catch (err) {
-        console.error("Erro na conversão: " + err.message);
+        errorAlert.style.display = "flex";
+        errorMessage.innerText = "Erro no Script: " + err.message;
     }
 }

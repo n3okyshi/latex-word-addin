@@ -54,51 +54,18 @@ function insertLatex() {
                 pureMathMl = pureMathMl.replace("<math", '<math xmlns="http://www.w3.org/1998/Math/MathML"');
             }
 
-            // Adição da declaração mso-application obrigatória para Flat OPC no Word 2016
-            var ooxmlPayload = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
-            '<?mso-application progid="Word.Document"?>' +
-            '<pkg:package xmlns:pkg="http://schemas.microsoft.com/office/2006/xmlPackage">' +
-              '<pkg:part pkg:name="/_rels/.rels" pkg:contentType="application/vnd.openxmlformats-package.relationships+xml">' +
-                '<pkg:xmlData>' +
-                  '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
-                    '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>' +
-                  '</Relationships>' +
-                '</pkg:xmlData>' +
-              '</pkg:part>' +
-              '<pkg:part pkg:name="/word/document.xml" pkg:contentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml">' +
-                '<pkg:xmlData>' +
-                  '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">' +
-                    '<w:body>' +
-                      '<w:altChunk r:id="altChunkId1" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"/>' +
-                    '</w:body>' +
-                  '</w:document>' +
-                '</pkg:xmlData>' +
-              '</pkg:part>' +
-              '<pkg:part pkg:name="/word/math.xml" pkg:contentType="application/mathml+xml">' +
-                '<pkg:xmlData>' +
-                  pureMathMl +
-                '</pkg:xmlData>' +
-              '</pkg:part>' +
-              '<pkg:part pkg:name="/word/_rels/document.xml.rels" pkg:contentType="application/vnd.openxmlformats-package.relationships+xml">' +
-                '<pkg:xmlData>' +
-                  '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
-                    '<Relationship Id="altChunkId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/aFChunk" Target="/word/math.xml"/>' +
-                  '</Relationships>' +
-                '</pkg:xmlData>' +
-              '</pkg:part>' +
-            '</pkg:package>';
-
-            // Utilizando Word.run em vez do Office.context compartilhado
             Word.run(function (context) {
                 var range = context.document.getSelection();
-                range.insertOoxml(ooxmlPayload, Word.InsertLocation.replace);
+                
+                // Roteia o MathML puro pelo conversor HTML do Word
+                range.insertHtml(pureMathMl, Word.InsertLocation.replace);
                 
                 return context.sync().then(function () {
                     errorAlert.style.display = "none";
                 });
             }).catch(function (error) {
                 errorAlert.style.display = "flex";
-                errorMessage.innerText = "Erro Word.run: " + error.message;
+                errorMessage.innerText = "Erro na injeção: " + error.message;
             });
         }
     } catch (err) {
